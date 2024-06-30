@@ -78,7 +78,7 @@ int TcpClient::Connect(){
     }
 
     // NON BLOCKING FLAG
-
+    //SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
     /*
     int flags = fcntl(cSocket, F_GETFL, 0);
     if (flags == -1) {
@@ -88,68 +88,11 @@ int TcpClient::Connect(){
     flags |= O_NONBLOCK;
     if (fcntl(cSocket, F_SETFL, flags) == -1) {
         return -1; 
-    }    
-    */
+    }  */  
+    
     return 0;
 }
 
-
-int TcpClient::SendAll(std::vector<unsigned char>& buf) {
-    int totalSent = 0;
-    int leftToSend = buf.size();
-    int nSent;
-
-    while (totalSent < buf.size()) {
-        nSent = SSL_write(this->ssl, buf.data() + totalSent, leftToSend);
-
-        if (nSent <= 0) {
-            int error = SSL_get_error(ssl, nSent);
-            std::cout << "Error while sending: " << error << std::endl;
-            break;
-        }
-
-        totalSent += nSent;
-        leftToSend -= nSent;
-
-        if (leftToSend == 0) {
-            break;
-        }
-    }
-
-    return totalSent;
-}
-
-int TcpClient::SendAll(const std::string& toSend){
-    int totalSent = 0;
-    int leftToSend = toSend.size();
-
-    int nSent;
-    while (totalSent < toSend.size())
-    {
-        nSent = SSL_write(this->ssl, toSend.data() + totalSent, leftToSend);
-
-        if(nSent <= 0);
-            break;
-        totalSent += nSent;
-        leftToSend -= leftToSend;
-    }
-    return nSent;
-}
-
-
-int TcpClient::Recv(std::vector<unsigned char>& buf, size_t toRecv){
-
-    int total = 0;
-    do{
-        int nRecv = SSL_read(ssl, buf.data() + total, toRecv - total);
-        if(nRecv <= 0)
-            break;
-        total += nRecv;
-
-    }while (total < toRecv);
-    
-    return total;
-}
 
 
 TcpClient::~TcpClient(){
@@ -269,63 +212,6 @@ int TcpClient::Connect()
 	return 0;
 }
 
-int TcpClient::SendAll(std::vector<unsigned char>& buf)
-{
-	int totalSent = 0;
-	int leftToSend = buf.size();
-	int nSent;
-
-	while (totalSent < buf.size()) {
-		nSent = SSL_write(this->ssl, buf.data() + totalSent, leftToSend);
-
-		if (nSent <= 0) {
-			int error = SSL_get_error(ssl, nSent);
-			std::cout << "Error while sending: " << error << std::endl;
-			break;
-		}
-
-		totalSent += nSent;
-		leftToSend -= nSent;
-
-		if (leftToSend == 0) {
-			break;
-		}
-	}
-
-	return totalSent;
-}
-
-int TcpClient::SendAll(const std::string& toSend)
-{
-	int totalSent = 0;
-	int leftToSend = toSend.size();
-
-	int nSent;
-	while (totalSent < toSend.size())
-	{
-		nSent = SSL_write(this->ssl, toSend.data() + totalSent, leftToSend);
-
-		if (nSent <= 0);
-		break;
-		totalSent += nSent;
-		leftToSend -= leftToSend;
-	}
-	return nSent;
-}
-
-int TcpClient::Recv(std::vector<unsigned char>& buf, size_t toRecv)
-{
-	int total = 0;
-	do {
-		int nRecv = SSL_read(ssl, buf.data() + total, toRecv - total);
-		if (nRecv <= 0)
-			break;
-		total += nRecv;
-
-	} while (total < toRecv);
-
-	return total;
-}
 
 #endif
 
@@ -347,3 +233,74 @@ const std::string TcpClient::GetSNI() {
 
 }
 
+int TcpClient::SendAll(std::vector<unsigned char>& buf) {
+    int totalSent = 0;
+    int leftToSend = buf.size();
+    int nSent;
+
+    while (totalSent < buf.size()) {
+        nSent = SSL_write(this->ssl, buf.data() + totalSent, leftToSend);
+
+        if (nSent <= 0) {
+            int error = SSL_get_error(ssl, nSent);
+            std::cout << "Error while sending: " << error << std::endl;
+            break;
+        }
+
+        totalSent += nSent;
+        leftToSend -= nSent;
+
+        if (leftToSend == 0) {
+            break;
+        }
+    }
+
+    return totalSent;
+}
+
+int TcpClient::SendAll(const std::string& toSend){
+    int totalSent = 0;
+    int leftToSend = toSend.size();
+
+    int nSent;
+    while (totalSent < toSend.size())
+    {
+        nSent = SSL_write(this->ssl, toSend.data() + totalSent, leftToSend);
+
+        if(nSent <= 0);
+            break;
+        totalSent += nSent;
+        leftToSend -= leftToSend;
+    }
+    return nSent;
+}
+
+/*
+    Tries to read ALL toRecv amount of bytes
+    If less data than toRecv was sent, the function will wait untill toRecv bytes is recv or the peer closes the connection
+
+*/
+int TcpClient::RecvAll(std::vector<unsigned char>& buf, size_t toRecv){
+    buf.resize(buf.size() + toRecv);
+    int total = 0;
+    do{
+        int nRecv = SSL_read(ssl, buf.data() + total, toRecv - total);
+        std::cout << nRecv << std::endl;
+        if(nRecv <= 0)
+            break;
+        total += nRecv;
+
+    }while (total < toRecv);
+    
+    
+    return total;
+}
+
+int TcpClient::Recv(std::vector<unsigned char>& buf, size_t toRecv){
+    size_t curSize = buf.size();
+    
+    buf.resize(buf.size() + toRecv);
+    
+    return SSL_read(ssl, buf.data() + curSize, toRecv);
+    
+}

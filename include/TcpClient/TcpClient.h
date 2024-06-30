@@ -59,6 +59,7 @@ public:
     int SendAll(std::vector<unsigned char>& buf);
     int SendAll(const std::string& toSend);
 
+    int RecvAll(std::vector<unsigned char>& buf, size_t toRecv);
     int Recv(std::vector<unsigned char>& buf, size_t toRecv);
 
 };
@@ -99,7 +100,7 @@ public:
     TcpClient(const std::string& host, unsigned short port);
 
 public:
-    const std::string GetTlsVersion();
+    onst std::string GetTlsVersion();
     const std::string GetCipher();
     const std::string GetSNI();
 
@@ -108,6 +109,7 @@ public:
     int SendAll(std::vector<unsigned char>& buf);
     int SendAll(const std::string& toSend);
 
+    int RecvAll(std::vector<unsigned char>& buf, size_t toRecv);
     int Recv(std::vector<unsigned char>& buf, size_t toRecv);
 };
 
