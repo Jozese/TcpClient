@@ -253,7 +253,7 @@ int TcpClient::Connect()
     if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
         SSL_free(ssl);
         SSL_CTX_free(this->sslCtx);
-        close(this->cSocket);
+        closesocket(this->cSocket);
         return 1;
     }
 

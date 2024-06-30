@@ -101,7 +101,7 @@ private:
     int SocketCreate();
 
 public:
-    WindowsTcpClient(const std::string& host, unsigned short port);
+    TcpClient(const std::string& host, unsigned short port);
 
 public:
     const std::string GetTlsVersion();
