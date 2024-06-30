@@ -15,6 +15,7 @@ int main(){
         std::cout << "Connected!\n";
         std::cout << "TLS Cipher Used: " << tcp.GetCipher() << std::endl;
         std::cout << "TLS Version: " << tcp.GetTlsVersion();
+        std::cout << "SNI: " << tcp.GetSNI();
     }
 
     const std::string httpReq = "GET /get HTTP/1.1\r\nConnection: close\r\nHost: httpbin.org\r\nAccept: application/json\r\nUser-agent: JozeseTcpClient\r\n\r\n";

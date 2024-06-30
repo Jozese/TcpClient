@@ -52,6 +52,7 @@ public:
 public:
     const std::string GetTlsVersion();
     const std::string GetCipher();
+    const std::string GetSNI();
 
     int Connect();
 
@@ -103,8 +104,9 @@ public:
     WindowsTcpClient(const std::string& host, unsigned short port);
 
 public:
-    const int GetTlsVersion();
+    const std::string GetTlsVersion();
     const std::string GetCipher();
+    const std::string GetSNI();
 
     int Connect();
 

@@ -14,7 +14,9 @@ int main(){
     {
         std::cout << "Connected!\n";
         std::cout << "TLS Cipher Used: " << tcp.GetCipher() << std::endl;
-        std::cout << "TLS Version: " << tcp.GetTlsVersion();
+        std::cout << "TLS Version: " << tcp.GetTlsVersion() << std::endl;   
+        std::cout << "SNI: " << tcp.GetSNI();
+
     }
     else{
         std::cout << "Failed to connect!\n"; 

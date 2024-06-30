@@ -324,3 +324,14 @@ const std::string TcpClient::GetTlsVersion() {
 const std::string TcpClient::GetCipher() {
     return SSL_get_cipher(this->ssl);
 }
+
+const std::string TcpClient::GetSNI() {
+    const char* sni = SSL_get_servername(this->ssl,TLSEXT_NAMETYPE_host_name);
+
+    if(sni)
+        return std::string(sni);
+        
+    return "";
+
+}
+
