@@ -58,6 +58,13 @@ int TcpClient::Connect(){
         return 1;
     }
 
+    if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
+        SSL_free(ssl);
+        SSL_CTX_free(this->sslCtx);
+        close(this->cSocket);
+        return 1;
+    }
+
     if(connect(this->cSocket, iter->ai_addr, iter->ai_addrlen) == -1){
         close(this->cSocket);
         return 1;
@@ -215,7 +222,7 @@ TcpClient::TcpClient(const std::string& host, unsigned short port):
 {
 
 	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-		std::cout << "Winsock dll was not found! " << WSAGetLastError() << std::endl;
+		std::cerr << "Winsock dll was not found! " << WSAGetLastError() << std::endl;
 		WSACleanup(); 
 	}
 
@@ -223,8 +230,6 @@ TcpClient::TcpClient(const std::string& host, unsigned short port):
 	this->sslCtx = SSL_CTX_new(TLS_client_method());
 	ssl = SSL_new(this->sslCtx);
 
-	/* Dangerous */
-	SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, nullptr);
 }
 
 int TcpClient::Connect()
@@ -237,7 +242,7 @@ int TcpClient::Connect()
 	}
 
 	if (connect(cSocket, (SOCKADDR*)&sAddr, sizeof(sAddr)) == SOCKET_ERROR) {
-		std::cout << "Failed to establish TCP handshake." << WSAGetLastError() << std::endl;
+		std::cerr << "Failed to establish TCP handshake." << WSAGetLastError() << std::endl;
 		closesocket(cSocket);
 		WSACleanup();
 		return 1;
@@ -245,8 +250,15 @@ int TcpClient::Connect()
 
 	SSL_set_fd(ssl, cSocket);
 
+    if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
+        SSL_free(ssl);
+        SSL_CTX_free(this->sslCtx);
+        close(this->cSocket);
+        return 1;
+    }
+
 	if (SSL_connect(ssl) != 1) {
-		std::cout << "Failed to establish SSL/TLS handshake." << std::endl;
+		std::cerr << "Failed to establish SSL/TLS handshake." << std::endl;
 		closesocket(cSocket);
 		SSL_shutdown(ssl);
 		SSL_free(ssl);
@@ -330,7 +342,7 @@ const std::string TcpClient::GetSNI() {
 
     if(sni)
         return std::string(sni);
-        
+
     return "";
 
 }
