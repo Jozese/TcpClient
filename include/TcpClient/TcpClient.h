@@ -70,11 +70,6 @@ public:
 #include <ws2tcpip.h>
 #include <ip2string.h>
 
-#pragma comment(lib, "libssl.lib")
-#pragma comment(lib, "libcrypto.lib")
-#pragma comment(lib, "Ws2_32.lib")
-#pragma comment(lib, "Ntdll.lib")
-
 class TcpClient
 {
 private:
