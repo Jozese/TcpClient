@@ -100,7 +100,7 @@ public:
     TcpClient(const std::string& host, unsigned short port);
 
 public:
-    onst std::string GetTlsVersion();
+    const std::string GetTlsVersion();
     const std::string GetCipher();
     const std::string GetSNI();
 
