@@ -8,7 +8,7 @@
 
 int main(){
     
-    TcpClient tcp("example.com", 443);
+    TcpClient tcp("info.cern.ch", 80);
 
     if (tcp.Connect() == 0)
     {
@@ -16,7 +16,6 @@ int main(){
         std::cout << "TLS Cipher Used: " << tcp.GetCipher() << std::endl;
         std::cout << "TLS Version: " << tcp.GetTlsVersion() << std::endl;   
         std::cout << "SNI: " << tcp.GetSNI();
-
     }
     else{
         std::cout << "Failed to connect!\n"; 

@@ -4,13 +4,20 @@
 
 TcpClient::TcpClient(const std::string& host, unsigned short port):
 host(host), port(port){
-
     SSL_library_init();
     this->sslCtx = SSL_CTX_new(TLS_client_method());
-    ssl = SSL_new(this->sslCtx);
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_AUTO_RETRY);
+}
 
-    SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, nullptr);
-
+TcpClient::TcpClient(const std::string& host, unsigned short port, bool expectedSsl):
+host(host), port(port), expectedSsl(expectedSsl){
+    SSL_library_init();
+    this->sslCtx = SSL_CTX_new(TLS_client_method());
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_AUTO_RETRY);
 }
 
 int TcpClient::ResolveDomainName(){
@@ -25,6 +32,9 @@ int TcpClient::ResolveDomainName(){
 }
 
 int TcpClient::SocketCreate(){
+    
+    ssl = SSL_new(this->sslCtx);
+  
 
     int status = ResolveDomainName();
     if(status != 0){
@@ -46,71 +56,68 @@ int TcpClient::SocketCreate(){
 int TcpClient::Connect(){
     
     if(SocketCreate() != 0){
-        
-        close(this->cSocket);
         return 1;
     }
+    
+    if(expectedSsl){
+        if (SSL_set_fd(ssl, this->cSocket) != 1) {
+            SSL_free(ssl);
+            SSL_CTX_free(this->sslCtx);
+            ssl = nullptr;
+            sslCtx = nullptr;
+            close(this->cSocket);
+            return 1;
+        }
 
-    if (SSL_set_fd(ssl, this->cSocket) != 1) {
-        SSL_free(ssl);
-        SSL_CTX_free(this->sslCtx);
-        close(this->cSocket);
-        return 1;
+        if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
+            SSL_free(ssl);
+            SSL_CTX_free(this->sslCtx);
+            ssl = nullptr;
+            sslCtx = nullptr;
+            close(this->cSocket);
+            return 1;
+        }
     }
-
-    if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
-        SSL_free(ssl);
-        SSL_CTX_free(this->sslCtx);
-        close(this->cSocket);
-        return 1;
-    }
+    
 
     if(connect(this->cSocket, iter->ai_addr, iter->ai_addrlen) == -1){
-        close(this->cSocket);
-        return 1;
-    }
-
-    if (SSL_connect(ssl) != 1) {
         SSL_free(ssl);
         SSL_CTX_free(this->sslCtx);
+        ssl = nullptr;
+        sslCtx = nullptr;
         close(this->cSocket);
         return 1;
     }
 
-    // NON BLOCKING FLAG
-    //SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-    /*
-    int flags = fcntl(cSocket, F_GETFL, 0);
-    if (flags == -1) {
-        return -1; 
+    if(expectedSsl){
+        if (SSL_connect(ssl) != 1) {
+            isSsl = false;
+        } 
     }
 
-    flags |= O_NONBLOCK;
-    if (fcntl(cSocket, F_SETFL, flags) == -1) {
-        return -1; 
-    }  */  
-    
     return 0;
 }
 
-
-
-TcpClient::~TcpClient(){
+void TcpClient::Cleanup(){
     if (cSocket != -1) {
         close(cSocket);
     }
-
-    if (ssl != nullptr) {
-        SSL_shutdown(ssl);
-        SSL_free(ssl);
+    if(isSsl){
+        if (ssl != nullptr) {
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+        }
+        if (sslCtx != nullptr) {
+            SSL_CTX_free(sslCtx);
+        }
     }
-    if (sslCtx != nullptr) {
-        SSL_CTX_free(sslCtx);
-    }
-
     if (dnsResult != nullptr) {
         freeaddrinfo(dnsResult);
     }
+}
+
+TcpClient::~TcpClient(){
+    Cleanup();
 }
 
 #elif _WIN32
@@ -181,6 +188,8 @@ int TcpClient::Connect()
 		std::cout << "Failed to create socket " << WSAGetLastError() << std::endl;
 		closesocket(cSocket);
 		WSACleanup();
+        ssl = nullptr;
+        sslCtx = nullptr;
 		return 1;
 	}
 
@@ -188,6 +197,8 @@ int TcpClient::Connect()
 		std::cerr << "Failed to establish TCP handshake." << WSAGetLastError() << std::endl;
 		closesocket(cSocket);
 		WSACleanup();
+        ssl = nullptr;
+        sslCtx = nullptr;
 		return 1;
 	}
 
@@ -197,6 +208,8 @@ int TcpClient::Connect()
         SSL_free(ssl);
         SSL_CTX_free(this->sslCtx);
         closesocket(this->cSocket);
+        ssl = nullptr;
+        sslCtx = nullptr;
         return 1;
     }
 
@@ -206,6 +219,8 @@ int TcpClient::Connect()
 		SSL_shutdown(ssl);
 		SSL_free(ssl);
 		WSACleanup();
+        ssl = nullptr;
+        sslCtx = nullptr;
 		return 1;
 	}
 
@@ -216,46 +231,23 @@ int TcpClient::Connect()
 #endif
 
 const std::string TcpClient::GetTlsVersion() {
-    return SSL_get_version(this->ssl); 
+    if(isSsl && ssl)
+        return SSL_get_version(this->ssl); 
+    return "";
 }
 
 const std::string TcpClient::GetCipher() {
-    return SSL_get_cipher(this->ssl);
+    if(isSsl && ssl)
+        return SSL_get_cipher(this->ssl);
+    return "";
 }
 
 const std::string TcpClient::GetSNI() {
-    const char* sni = SSL_get_servername(this->ssl,TLSEXT_NAMETYPE_host_name);
+    std::string sni = "";
 
-    if(sni)
-        return std::string(sni);
-
-    return "";
-
-}
-
-int TcpClient::SendAll(std::vector<unsigned char>& buf) {
-    int totalSent = 0;
-    int leftToSend = buf.size();
-    int nSent;
-
-    while (totalSent < buf.size()) {
-        nSent = SSL_write(this->ssl, buf.data() + totalSent, leftToSend);
-
-        if (nSent <= 0) {
-            int error = SSL_get_error(ssl, nSent);
-            std::cout << "Error while sending: " << error << std::endl;
-            break;
-        }
-
-        totalSent += nSent;
-        leftToSend -= nSent;
-
-        if (leftToSend == 0) {
-            break;
-        }
-    }
-
-    return totalSent;
+    if(isSsl && ssl)
+        sni = SSL_get_servername(this->ssl,TLSEXT_NAMETYPE_host_name);
+    return sni;
 }
 
 int TcpClient::SendAll(const std::string& toSend){
@@ -265,42 +257,233 @@ int TcpClient::SendAll(const std::string& toSend){
     int nSent;
     while (totalSent < toSend.size())
     {
-        nSent = SSL_write(this->ssl, toSend.data() + totalSent, leftToSend);
+        if (isSsl) {
+            nSent = SSL_write(this->ssl, toSend.data() + totalSent, leftToSend);
+        } 
+        else {
+            nSent = send(this->cSocket, toSend.data() + totalSent, leftToSend, MSG_NOSIGNAL);        
+        }
 
         if(nSent <= 0);
             break;
+
         totalSent += nSent;
         leftToSend -= leftToSend;
     }
     return nSent;
 }
 
-/*
-    Tries to read ALL toRecv amount of bytes
-    If less data than toRecv was sent, the function will wait untill toRecv bytes is recv or the peer closes the connection
 
-*/
-int TcpClient::RecvAll(std::vector<unsigned char>& buf, size_t toRecv){
-    buf.resize(buf.size() + toRecv);
-    int total = 0;
-    do{
-        int nRecv = SSL_read(ssl, buf.data() + total, toRecv - total);
-        std::cout << nRecv << std::endl;
-        if(nRecv <= 0)
+int TcpClient::SendAll(std::vector<unsigned char>& buf) {
+    
+    int totalSent = 0;
+    int leftToSend = buf.size();
+    int nSent;
+
+    while (totalSent < buf.size()) {
+        if (isSsl) {
+            nSent = SSL_write(this->ssl, buf.data() + totalSent, leftToSend);
+        } else {
+            nSent = send(this->cSocket, buf.data() + totalSent, leftToSend, 0);
+        }
+
+        if (leftToSend == 0) {
             break;
-        total += nRecv;
+        }
 
-    }while (total < toRecv);
-    
-    
+        totalSent += nSent;
+        leftToSend -= nSent;
+        
+    }
+    return totalSent;
+}
+
+
+int TcpClient::RecvAll(std::vector<unsigned char>& buf, size_t toRecv, size_t offset) {
+    buf.resize(offset + toRecv);
+    int total = 0;
+    do {
+        int nRecv;
+        if (isSsl) {
+            nRecv = SSL_read(ssl, buf.data() + offset + total, toRecv - total);
+            if (nRecv <= 0) {
+                break;
+            }
+        } else {
+            nRecv = recv(this->cSocket, buf.data() + offset + total, toRecv - total, MSG_WAITALL);
+            if (nRecv <= 0) {
+                break;
+            }
+        }
+        total += nRecv;
+    } while (total < toRecv);
+
+    if (total < toRecv) {
+        buf.resize(offset + total);
+    }
     return total;
 }
 
-int TcpClient::Recv(std::vector<unsigned char>& buf, size_t toRecv){
-    size_t curSize = buf.size();
-    
-    buf.resize(buf.size() + toRecv);
-    
-    return SSL_read(ssl, buf.data() + curSize, toRecv);
-    
+
+
+int TcpClient::PeekEndOfDelimiter(const std::vector<unsigned char>& delimiter, int max_size) {
+    std::vector<unsigned char> peek_buf(max_size);
+    int total_bytes_peeked = 0;
+    int retry_count = 0;
+    const int max_retries = 5;
+
+    while (total_bytes_peeked < max_size) {
+        int bytes_peeked;
+        if (isSsl) {
+            bytes_peeked = SSL_peek(ssl, peek_buf.data() + total_bytes_peeked, max_size - total_bytes_peeked);
+            if (bytes_peeked <= 0) {
+                return -1;
+            }
+        } else {
+            bytes_peeked = recv(this->cSocket, peek_buf.data() + total_bytes_peeked, 
+                                max_size - total_bytes_peeked, MSG_PEEK);
+            if (bytes_peeked == -1) {
+                return -1;
+            }
+        }
+
+        total_bytes_peeked += bytes_peeked;
+        
+        auto found = std::search(peek_buf.begin(), peek_buf.begin() + total_bytes_peeked, 
+                                 delimiter.begin(), delimiter.end());
+        if (found != peek_buf.begin() + total_bytes_peeked) {
+            return found - peek_buf.begin() + delimiter.size();
+        }
+
+        retry_count = 0;
+    }
+
+    return -1;
+}
+
+bool TcpClient::IsConnected() {
+
+    int sockfd = cSocket;
+    if (sockfd < 0) {
+        return false;
+    }
+
+    int error = 0;
+    socklen_t len = sizeof(error);
+    if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+        return false;
+    }
+    if (error != 0) {
+        return false;
+    }
+
+    if(isSsl){
+        if (SSL_get_shutdown(ssl) & (SSL_RECEIVED_SHUTDOWN | SSL_SENT_SHUTDOWN)) {
+            return false;
+        }
+
+        if (SSL_pending(ssl) > 0) {
+            return true;
+    }
+    }
+
+    fd_set read_fds, write_fds, except_fds;
+    FD_ZERO(&read_fds);
+    FD_ZERO(&write_fds);
+    FD_ZERO(&except_fds);
+    FD_SET(sockfd, &read_fds);
+    FD_SET(sockfd, &write_fds);
+    FD_SET(sockfd, &except_fds);
+
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+
+    int select_result = select(sockfd + 1, &read_fds, &write_fds, &except_fds, &timeout);
+
+    if (select_result < 0) {
+        return false;
+    }
+
+    if (FD_ISSET(sockfd, &except_fds)) {
+        return false;
+    }
+
+    return FD_ISSET(sockfd, &read_fds) || FD_ISSET(sockfd, &write_fds);
+}
+
+void TcpClient::FastDisconnect(){
+    if(ssl && isSsl){
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+        ssl = nullptr;
+    }
+
+    if (dnsResult != nullptr) {
+        freeaddrinfo(dnsResult);
+        dnsResult = nullptr;
+    }
+
+    if(cSocket != -1){
+    #ifdef __linux__
+        close(this->cSocket);
+        cSocket = -1;
+    #elif _WIN32
+        closesocket(this->cSocket);
+        cSocket = -1;
+    #endif
+    }
+}
+
+void TcpClient::SetTimeout(time_t sec){
+        #ifdef __linux__
+            struct timeval tv;
+            tv.tv_sec = sec; 
+            tv.tv_usec = 0;
+            setsockopt(cSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+        #elif _WIN32
+            DWORD millisec = static_cast<DWORD>(sec * 1000);
+            setsockopt(cSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&millisec, sizeof(millisec));
+        #endif
+
+}
+
+void TcpClient::DisableNagle(){
+    int flag = 1;
+    setsockopt(cSocket, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
+}
+
+void TcpClient::SetMaxVersion(int version){
+    if(sslCtx)
+        SSL_CTX_set_max_proto_version(sslCtx,version);
+}
+
+void TcpClient::SetMinVersion(int version){
+    if(sslCtx)
+        SSL_CTX_set_min_proto_version(sslCtx,version);
+}
+
+int TcpClient::SetCipherSuiteList(const std::string& list){
+    if(sslCtx)
+        return SSL_CTX_set_cipher_list(sslCtx,list.c_str());
+    return 0;
+}
+
+const std::string TcpClient::GetCiphers(){
+    std::stringstream ss;
+    if(sslCtx){
+        auto ciphers = SSL_CTX_get_ciphers(sslCtx);
+
+        for(int i = 0; i < sk_SSL_CIPHER_num(ciphers); i++){
+            const SSL_CIPHER* cipher = sk_SSL_CIPHER_value(ciphers, i);
+            const char* cipherName = SSL_CIPHER_get_name(cipher);
+            ss << cipherName << '\n';
+        }
+    }
+    return ss.str();
+}
+
+void TcpClient::SetVerifyFalse(){
+    if(sslCtx)
+        SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, nullptr);
 }

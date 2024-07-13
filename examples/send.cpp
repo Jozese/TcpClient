@@ -8,7 +8,7 @@
 
 int main(){
     
-    TcpClient tcp("httpbin.org", 443);
+    TcpClient tcp("127.0.0.1", 80);
 
     if (tcp.Connect() == 0)
     {
@@ -18,18 +18,19 @@ int main(){
         std::cout << "SNI: " << tcp.GetSNI();
     }
 
-    const std::string httpReq = "GET /get HTTP/1.1\r\nConnection: close\r\nHost: httpbin.org\r\nAccept: application/json\r\nUser-agent: JozeseTcpClient\r\n\r\n";
+    const std::string httpReq = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Close\r\n\r\n";
 
     std::vector<unsigned char> recvBuffer;
+    auto httpReqData = std::vector<unsigned char>(httpReq.begin(), httpReq.end());
 
+    std::cout << httpReq.size() << std::endl;
     int sent = tcp.SendAll(httpReq);
 
-    //Reading arbitrary 1024 bytes obviously you should not read a generic http response this way.
+    //Reading arbitrary 1024 bytes
     int recv = tcp.RecvAll(recvBuffer,1024);
 
     std::cout << "\n\n" <<"Sent " << sent << " bytes\n";
     std::cout << "Recvd " << recv << " bytes\n";
-
-    std::cout << "\n\n" << recvBuffer.data() + '\0'; 
+    std::cout << "\n\n" << recvBuffer.data(); 
 
 }
