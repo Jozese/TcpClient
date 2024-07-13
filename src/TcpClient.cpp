@@ -298,7 +298,7 @@ int TcpClient::SendAll(std::vector<unsigned char>& buf) {
     return totalSent;
 }
 
-
+    
 int TcpClient::RecvAll(std::vector<unsigned char>& buf, size_t toRecv, size_t offset) {
     buf.resize(offset + toRecv);
     int total = 0;

@@ -1,14 +1,14 @@
 #include "../include/TcpClient/TcpClient.h"
 
 /*
-    Connects to example.com on port 443
-    g++ connection.cpp -L../lib -lTcpClient -lssl -lcrypto
+    Connects to info.cern.ch on port 80
+    g++ nonssl_connection.cpp -L../lib -lTcpClient -lssl -lcrypto
 
 */
 
 int main(){
     
-    TcpClient tcp("example.com", 443);
+    TcpClient tcp("info.cern.ch", 80, false);
 
     if (tcp.Connect() == 0)
     {
