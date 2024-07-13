@@ -16,7 +16,7 @@ sudo apt-get install libssl-dev
 ```bash
 ./BuildLinux.sh
 ```
-Compiled static library will be in [lib](lib)
+Compiled static library will be in [lib](lib) This script also copies the includes and the static library into /usr/local/include and /usr/local/lib
 ### Windows (Visual Studio)
 1. **Install OpenSSL**
 
