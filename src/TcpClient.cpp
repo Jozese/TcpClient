@@ -464,8 +464,15 @@ void TcpClient::SetMinVersion(int version){
 }
 
 int TcpClient::SetCipherSuiteList(const std::string& list){
-    if(sslCtx)
-        return SSL_CTX_set_cipher_list(sslCtx,list.c_str());
+    if(sslCtx){
+        int max_version = SSL_CTX_get_max_proto_version(sslCtx);
+        if (max_version == TLS1_3_VERSION) {
+            return SSL_CTX_set_ciphersuites(sslCtx, list.c_str());
+        }
+        else{
+            return SSL_CTX_set_cipher_list(sslCtx, list.c_str());
+        }
+    }
     return 0;
 }
 
@@ -483,7 +490,11 @@ const std::string TcpClient::GetCiphers(){
     return ss.str();
 }
 
-void TcpClient::SetVerifyFalse(){
-    if(sslCtx)
-        SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, nullptr);
+void TcpClient::SetVerify(bool setVeriy){
+    if(sslCtx){
+
+        if(!setVeriy)
+            SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, nullptr);
+
+    }
 }

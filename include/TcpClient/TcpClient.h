@@ -78,7 +78,7 @@ public:
     int RecvLine(std::vector<unsigned char>& buf);
     int PeekEndOfDelimiter(const std::vector<unsigned char>& delimiter, int size);
 
-    void SetVerifyFalse();
+    void SetVerify(bool setVeriy);
 
     void SetMinVersion(int version);
     void SetMaxVersion(int version);
@@ -129,27 +129,39 @@ public:
     TcpClient(const std::string& host, unsigned short port);
 
 public:
+    
+    void SetTimeout(time_t sec);
+
     const std::string GetTlsVersion();
     const std::string GetCipher();
     const std::string GetSNI();
 
-    void SetTimeout(time_t sec);
+    void SetHost(const std::string& newHost){host = newHost;}
+    void SetPort(unsigned short newPort){port = newPort;}
 
     int Connect();
+
+    void Cleanup();
 
     int SendAll(std::vector<unsigned char>& buf);
     int SendAll(const std::string& toSend);
 
-    int RecvAll(std::vector<unsigned char>& buf, size_t toRecv);
-    int Recv(std::vector<unsigned char>& buf, size_t toRecv);
-    int Recv(std::vector<unsigned char>& buf, size_t toRecv, size_t pos);
+    int RecvAll(std::vector<unsigned char>& buf, size_t toRecv, size_t offset = 0);
     int RecvLine(std::vector<unsigned char>& buf);
     int PeekEndOfDelimiter(const std::vector<unsigned char>& delimiter, int size);
 
+    void SetVerify(bool setVeriy);
+
+    void SetMinVersion(int version);
+    void SetMaxVersion(int version);
+    int SetCipherSuiteList(const std::string& list);
+    void DisableNagle();
+
+    const std::string GetCiphers();
+
     bool IsConnected();
-
     void FastDisconnect();
-
+    
 };
 
 #endif
