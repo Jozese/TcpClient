@@ -1,24 +1,138 @@
 #include "../include/TcpClient/TcpClient.h"
 
-#ifdef __linux__
 
 TcpClient::TcpClient(const std::string& host, unsigned short port):
 host(host), port(port){
+
+#ifdef _WIN32
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+		WSACleanup(); 
+	}
+#endif
+
     SSL_library_init();
     this->sslCtx = SSL_CTX_new(TLS_client_method());
     SSL_CTX_set_mode(sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
     SSL_CTX_set_mode(sslCtx, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
     SSL_CTX_set_mode(sslCtx, SSL_MODE_AUTO_RETRY);
+
 }
 
 TcpClient::TcpClient(const std::string& host, unsigned short port, bool expectedSsl):
 host(host), port(port), expectedSsl(expectedSsl){
+
+#ifdef _WIN32
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+		WSACleanup(); 
+	}
+    
+#endif
+
     SSL_library_init();
     this->sslCtx = SSL_CTX_new(TLS_client_method());
     SSL_CTX_set_mode(sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
     SSL_CTX_set_mode(sslCtx, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
     SSL_CTX_set_mode(sslCtx, SSL_MODE_AUTO_RETRY);
+
+
 }
+
+void TcpClient::Init(){
+    SocketCreate();
+}
+
+int TcpClient::Connect(){
+    
+    if(cSocket == -1)
+        return 1;
+
+    if(expectedSsl){
+        if (SSL_set_fd(ssl, this->cSocket) != 1) {
+            SSL_free(ssl);
+            SSL_CTX_free(this->sslCtx);
+            ssl = nullptr;
+            sslCtx = nullptr;
+            #ifdef _WIN32
+                closesocket(cSocket);
+            #elif __linux__
+                close(cSocket);
+            #endif            
+                return 1;
+        }
+
+        if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
+            SSL_free(ssl);
+            SSL_CTX_free(this->sslCtx);
+            ssl = nullptr;
+            sslCtx = nullptr;
+            #ifdef _WIN32
+                closesocket(cSocket);
+            #elif __linux__
+                close(cSocket);
+            #endif           
+            return 1;
+        }
+    }
+    
+#ifdef __linux__
+    if(connect(this->cSocket, iter->ai_addr, iter->ai_addrlen) == -1){
+        SSL_free(ssl);
+        SSL_CTX_free(this->sslCtx);
+        ssl = nullptr;
+        sslCtx = nullptr;
+        close(cSocket);
+        return 1;
+    }
+    #elif _WIN32
+    if (connect(cSocket, (SOCKADDR*)&sAddr, sizeof(sAddr)) == SOCKET_ERROR) {
+		closesocket(cSocket);
+		WSACleanup();
+        ssl = nullptr;
+        sslCtx = nullptr;
+		return 1;
+	}
+#endif
+
+
+    if(expectedSsl){
+        if (SSL_connect(ssl) != 1) {
+            isSsl = false;
+        } 
+    }else{
+        isSsl = false;
+    }
+
+    return 0;
+}
+
+void TcpClient::Cleanup(){
+    if (cSocket != -1) {
+        #ifdef _WIN32
+            closesocket(cSocket);
+        #elif __linux__
+            close(cSocket);
+        #endif
+    }
+    if(isSsl){
+        if (ssl != nullptr) {
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+        }
+        if (sslCtx != nullptr) {
+            SSL_CTX_free(sslCtx);
+        }
+    }
+    if (dnsResult != nullptr) {
+        freeaddrinfo(dnsResult);
+    }
+}
+
+TcpClient::~TcpClient(){
+    Cleanup();
+}
+
+
+#ifdef __linux__
 
 int TcpClient::ResolveDomainName(){
     addrinfo hints;
@@ -53,72 +167,6 @@ int TcpClient::SocketCreate(){
     return 0;
 }
 
-int TcpClient::Connect(){
-    
-    if(SocketCreate() != 0){
-        return 1;
-    }
-    
-    if(expectedSsl){
-        if (SSL_set_fd(ssl, this->cSocket) != 1) {
-            SSL_free(ssl);
-            SSL_CTX_free(this->sslCtx);
-            ssl = nullptr;
-            sslCtx = nullptr;
-            close(this->cSocket);
-            return 1;
-        }
-
-        if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
-            SSL_free(ssl);
-            SSL_CTX_free(this->sslCtx);
-            ssl = nullptr;
-            sslCtx = nullptr;
-            close(this->cSocket);
-            return 1;
-        }
-    }
-    
-
-    if(connect(this->cSocket, iter->ai_addr, iter->ai_addrlen) == -1){
-        SSL_free(ssl);
-        SSL_CTX_free(this->sslCtx);
-        ssl = nullptr;
-        sslCtx = nullptr;
-        close(this->cSocket);
-        return 1;
-    }
-
-    if(expectedSsl){
-        if (SSL_connect(ssl) != 1) {
-            isSsl = false;
-        } 
-    }
-
-    return 0;
-}
-
-void TcpClient::Cleanup(){
-    if (cSocket != -1) {
-        close(cSocket);
-    }
-    if(isSsl){
-        if (ssl != nullptr) {
-            SSL_shutdown(ssl);
-            SSL_free(ssl);
-        }
-        if (sslCtx != nullptr) {
-            SSL_CTX_free(sslCtx);
-        }
-    }
-    if (dnsResult != nullptr) {
-        freeaddrinfo(dnsResult);
-    }
-}
-
-TcpClient::~TcpClient(){
-    Cleanup();
-}
 
 #elif _WIN32
 
@@ -126,7 +174,6 @@ int TcpClient::ResolveDomainName()
 {
 	int resolve = getaddrinfo(this->host.c_str(), 0, nullptr, &dnsResult);
 	if (resolve != 0) {
-		std::cout << "Error while resolving hostname" << std::endl;
 		return -1;
 	}
 	return resolve;
@@ -134,6 +181,9 @@ int TcpClient::ResolveDomainName()
 
 int TcpClient::SocketCreate()
 {
+
+    ssl = SSL_new(this->sslCtx);
+
 	sAddr.sin_family = AF_INET;
 	sAddr.sin_port = htons(port);
 
@@ -141,7 +191,6 @@ int TcpClient::SocketCreate()
 	hints.ai_family = AF_INET;
 
 	if (ResolveDomainName() == -1) {
-		std::cout << "getaddrinfo falied" << std::endl;
 		return -1;
 	}
 
@@ -167,67 +216,6 @@ int TcpClient::SocketCreate()
 	return 0;
 }
 
-TcpClient::TcpClient(const std::string& host, unsigned short port):
-	host(host), port(port)
-{
-
-	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-		std::cerr << "Winsock dll was not found! " << WSAGetLastError() << std::endl;
-		WSACleanup(); 
-	}
-
-	SSL_library_init();
-	this->sslCtx = SSL_CTX_new(TLS_client_method());
-	ssl = SSL_new(this->sslCtx);
-
-}
-
-int TcpClient::Connect()
-{
-	if (SocketCreate() != 0) {
-		std::cout << "Failed to create socket " << WSAGetLastError() << std::endl;
-		closesocket(cSocket);
-		WSACleanup();
-        ssl = nullptr;
-        sslCtx = nullptr;
-		return 1;
-	}
-
-	if (connect(cSocket, (SOCKADDR*)&sAddr, sizeof(sAddr)) == SOCKET_ERROR) {
-		std::cerr << "Failed to establish TCP handshake." << WSAGetLastError() << std::endl;
-		closesocket(cSocket);
-		WSACleanup();
-        ssl = nullptr;
-        sslCtx = nullptr;
-		return 1;
-	}
-
-	SSL_set_fd(ssl, cSocket);
-
-    if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
-        SSL_free(ssl);
-        SSL_CTX_free(this->sslCtx);
-        closesocket(this->cSocket);
-        ssl = nullptr;
-        sslCtx = nullptr;
-        return 1;
-    }
-
-	if (SSL_connect(ssl) != 1) {
-		std::cerr << "Failed to establish SSL/TLS handshake." << std::endl;
-		closesocket(cSocket);
-		SSL_shutdown(ssl);
-		SSL_free(ssl);
-		WSACleanup();
-        ssl = nullptr;
-        sslCtx = nullptr;
-		return 1;
-	}
-
-	return 0;
-}
-
-
 #endif
 
 const std::string TcpClient::GetTlsVersion() {
@@ -243,7 +231,7 @@ const std::string TcpClient::GetCipher() {
 }
 
 const std::string TcpClient::GetSNI() {
-    std::string sni = "";
+    std::string sni = this->host;
 
     if(isSsl && ssl)
         sni = SSL_get_servername(this->ssl,TLSEXT_NAMETYPE_host_name);
@@ -261,7 +249,7 @@ int TcpClient::SendAll(const std::string& toSend){
             nSent = SSL_write(this->ssl, toSend.data() + totalSent, leftToSend);
         } 
         else {
-            nSent = send(this->cSocket, toSend.data() + totalSent, leftToSend, MSG_NOSIGNAL);        
+            nSent = send(this->cSocket, toSend.data() + totalSent, leftToSend, 0);        
         }
 
         if(nSent <= 0);
@@ -284,7 +272,7 @@ int TcpClient::SendAll(std::vector<unsigned char>& buf) {
         if (isSsl) {
             nSent = SSL_write(this->ssl, buf.data() + totalSent, leftToSend);
         } else {
-            nSent = send(this->cSocket, buf.data() + totalSent, leftToSend, 0);
+            nSent = send(this->cSocket, reinterpret_cast<char*>(buf.data() + totalSent), leftToSend, 0);
         }
 
         if (leftToSend == 0) {
@@ -310,7 +298,7 @@ int TcpClient::RecvAll(std::vector<unsigned char>& buf, size_t toRecv, size_t of
                 break;
             }
         } else {
-            nRecv = recv(this->cSocket, buf.data() + offset + total, toRecv - total, MSG_WAITALL);
+            nRecv = recv(this->cSocket, reinterpret_cast<char*>(buf.data() + offset + total), toRecv - total, MSG_WAITALL);
             if (nRecv <= 0) {
                 break;
             }
@@ -335,12 +323,12 @@ int TcpClient::PeekEndOfDelimiter(const std::vector<unsigned char>& delimiter, i
     while (total_bytes_peeked < max_size) {
         int bytes_peeked;
         if (isSsl) {
-            bytes_peeked = SSL_peek(ssl, peek_buf.data() + total_bytes_peeked, max_size - total_bytes_peeked);
+            bytes_peeked = SSL_peek(ssl, reinterpret_cast<char*>(peek_buf.data() + total_bytes_peeked), max_size - total_bytes_peeked);
             if (bytes_peeked <= 0) {
                 return -1;
             }
         } else {
-            bytes_peeked = recv(this->cSocket, peek_buf.data() + total_bytes_peeked, 
+            bytes_peeked = recv(this->cSocket, reinterpret_cast<char*>(peek_buf.data() + total_bytes_peeked), 
                                 max_size - total_bytes_peeked, MSG_PEEK);
             if (bytes_peeked == -1) {
                 return -1;
@@ -370,12 +358,20 @@ bool TcpClient::IsConnected() {
 
     int error = 0;
     socklen_t len = sizeof(error);
-    if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+
+    #ifdef __linux__
+        int err = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len);
+    #elif _WIN32
+        int err = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char*)&error, &len);
+    #endif
+
+    if (err < 0) 
         return false;
-    }
-    if (error != 0) {
+    
+
+    if (error != 0) 
         return false;
-    }
+    
 
     if(isSsl){
         if (SSL_get_shutdown(ssl) & (SSL_RECEIVED_SHUTDOWN | SSL_SENT_SHUTDOWN)) {
@@ -384,7 +380,7 @@ bool TcpClient::IsConnected() {
 
         if (SSL_pending(ssl) > 0) {
             return true;
-    }
+        }   
     }
 
     fd_set read_fds, write_fds, except_fds;

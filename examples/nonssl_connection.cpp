@@ -9,6 +9,8 @@
 int main(){
     
     TcpClient tcp("info.cern.ch", 80, false);
+    tcp.Init();
+
 
     if (tcp.Connect() == 0)
     {

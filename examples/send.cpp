@@ -9,6 +9,7 @@
 int main(){
     
     TcpClient tcp("httpbin.org", 443);
+    tcp.Init();
 
     if (tcp.Connect() == 0)
     {

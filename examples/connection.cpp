@@ -9,6 +9,7 @@
 int main(){
     
     TcpClient tcp("example.com", 443);
+    tcp.Init();
 
     if (tcp.Connect() == 0)
     {
