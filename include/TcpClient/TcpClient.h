@@ -37,7 +37,7 @@
 
 class TcpClient {
 
-private:
+public:
     int cSocket = -1;
     sockaddr_in sAddr;
 
@@ -62,7 +62,7 @@ private:
     int SocketCreate();
 
 public:
-    TcpClient() = default;
+    TcpClient();
     TcpClient(const std::string& host, unsigned short port);
     TcpClient(const std::string& host, unsigned short port, bool expectedSsl);
     ~TcpClient();

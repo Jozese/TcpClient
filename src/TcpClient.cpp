@@ -1,5 +1,18 @@
 #include "../include/TcpClient/TcpClient.h"
 
+TcpClient::TcpClient(){
+    #ifdef _WIN32
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+		WSACleanup(); 
+	}
+    #endif
+
+    SSL_library_init();
+    this->sslCtx = SSL_CTX_new(TLS_client_method());
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+    SSL_CTX_set_mode(sslCtx, SSL_MODE_AUTO_RETRY);
+}
 
 TcpClient::TcpClient(const std::string& host, unsigned short port):
 host(host), port(port){
@@ -141,20 +154,19 @@ int TcpClient::ResolveDomainName(){
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-
     return getaddrinfo(this->host.c_str(), std::to_string(port).c_str(), &hints, &dnsResult);
 }
 
 int TcpClient::SocketCreate(){
     
     ssl = SSL_new(this->sslCtx);
-  
 
     int status = ResolveDomainName();
     if(status != 0){
         freeaddrinfo(dnsResult);
         return 1;
     }
+
     
     for(iter = dnsResult; iter != nullptr; iter = iter->ai_next){
         this->cSocket = socket(iter->ai_family, iter->ai_socktype, iter->ai_protocol);
