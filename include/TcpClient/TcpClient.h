@@ -37,7 +37,7 @@
 
 class TcpClient {
 
-public:
+private:
     int cSocket = -1;
     sockaddr_in sAddr;
 
