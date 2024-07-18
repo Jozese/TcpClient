@@ -62,6 +62,7 @@ private:
     int SocketCreate();
 
 public:
+    TcpClient() = default;
     TcpClient(const std::string& host, unsigned short port);
     TcpClient(const std::string& host, unsigned short port, bool expectedSsl);
     ~TcpClient();
