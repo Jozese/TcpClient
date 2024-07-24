@@ -86,8 +86,8 @@ public:
     int SendAll(std::vector<unsigned char>& buf);
     int SendAll(const std::string& toSend);
 
+    int Read(std::vector<unsigned char>& buf);
     int RecvAll(std::vector<unsigned char>& buf, size_t toRecv, size_t offset = 0);
-    int RecvLine(std::vector<unsigned char>& buf);
     int PeekEndOfDelimiter(const std::vector<unsigned char>& delimiter, int size);
 
     void SetVerify(bool setVeriy);

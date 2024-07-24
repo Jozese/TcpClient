@@ -56,6 +56,7 @@ void TcpClient::Init(){
 
 int TcpClient::Connect(){
     
+
     if(cSocket == -1)
         return 1;
 
@@ -126,14 +127,12 @@ void TcpClient::Cleanup(){
             close(cSocket);
         #endif
     }
-    if(isSsl){
-        if (ssl != nullptr) {
-            SSL_shutdown(ssl);
-            SSL_free(ssl);
-        }
-        if (sslCtx != nullptr) {
-            SSL_CTX_free(sslCtx);
-        }
+    if (ssl != nullptr) {
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+    }
+    if (sslCtx != nullptr) {
+        SSL_CTX_free(sslCtx);
     }
     if (dnsResult != nullptr) {
         freeaddrinfo(dnsResult);
@@ -161,13 +160,14 @@ int TcpClient::SocketCreate(){
     
     ssl = SSL_new(this->sslCtx);
 
-    int status = ResolveDomainName();
-    if(status != 0){
-        freeaddrinfo(dnsResult);
-        return 1;
+    if(!dnsResult){
+        int status = ResolveDomainName();
+        if(status != 0){
+            freeaddrinfo(dnsResult);
+            return 1;
+        }
     }
 
-    
     for(iter = dnsResult; iter != nullptr; iter = iter->ai_next){
         this->cSocket = socket(iter->ai_family, iter->ai_socktype, iter->ai_protocol);
 
@@ -325,12 +325,11 @@ int TcpClient::RecvAll(std::vector<unsigned char>& buf, size_t toRecv, size_t of
 }
 
 
-
+//Kinda useless to iterate since we will just get the same data over and over.
 int TcpClient::PeekEndOfDelimiter(const std::vector<unsigned char>& delimiter, int max_size) {
     std::vector<unsigned char> peek_buf(max_size);
     int total_bytes_peeked = 0;
     int retry_count = 0;
-    const int max_retries = 5;
 
     while (total_bytes_peeked < max_size) {
         int bytes_peeked;
@@ -340,7 +339,7 @@ int TcpClient::PeekEndOfDelimiter(const std::vector<unsigned char>& delimiter, i
                 return -1;
             }
         } else {
-            bytes_peeked = recv(this->cSocket, reinterpret_cast<char*>(peek_buf.data() + total_bytes_peeked), 
+            bytes_peeked = recv(cSocket, reinterpret_cast<char*>(peek_buf.data() + total_bytes_peeked), 
                                 max_size - total_bytes_peeked, MSG_PEEK);
             if (bytes_peeked == -1) {
                 return -1;
@@ -355,69 +354,98 @@ int TcpClient::PeekEndOfDelimiter(const std::vector<unsigned char>& delimiter, i
             return found - peek_buf.begin() + delimiter.size();
         }
 
-        retry_count = 0;
     }
 
     return -1;
 }
 
-bool TcpClient::IsConnected() {
+int TcpClient::Read(std::vector<unsigned char>& buf){
+    unsigned char tmp[1024];
+    int bytes_read = -1;
 
-    int sockfd = cSocket;
-    if (sockfd < 0) {
+    if(isSsl){
+        bytes_read = SSL_read(ssl, tmp, sizeof(tmp));
+        if (bytes_read <= 0)
+            return -1;
+    }
+    else{
+        bytes_read = recv(cSocket, tmp, sizeof(tmp), 0);
+        if (bytes_read <= 0)
+            return -1;
+    }
+    buf.insert(buf.end(), tmp, tmp + bytes_read);
+    return bytes_read;
+}
+
+
+
+// Lots of checks to see if we are connected and also connected to the same host
+bool TcpClient::IsConnected() {
+    if (cSocket < 0) {
         return false;
     }
 
     int error = 0;
     socklen_t len = sizeof(error);
-
     #ifdef __linux__
-        int err = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len);
+    int err = getsockopt(cSocket, SOL_SOCKET, SO_ERROR, &error, &len);
     #elif _WIN32
-        int err = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char*)&error, &len);
+    int err = getsockopt(cSocket, SOL_SOCKET, SO_ERROR, (char*)&error, &len);
     #endif
-
-    if (err < 0) 
+    if (err < 0 || error != 0)
         return false;
-    
 
-    if (error != 0) 
-        return false;
-    
-
-    if(isSsl){
+    if (isSsl) {
         if (SSL_get_shutdown(ssl) & (SSL_RECEIVED_SHUTDOWN | SSL_SENT_SHUTDOWN)) {
             return false;
         }
-
         if (SSL_pending(ssl) > 0) {
             return true;
-        }   
+        }
     }
 
     fd_set read_fds, write_fds, except_fds;
     FD_ZERO(&read_fds);
     FD_ZERO(&write_fds);
     FD_ZERO(&except_fds);
-    FD_SET(sockfd, &read_fds);
-    FD_SET(sockfd, &write_fds);
-    FD_SET(sockfd, &except_fds);
-
+    FD_SET(cSocket, &read_fds);
+    FD_SET(cSocket, &write_fds);
+    FD_SET(cSocket, &except_fds);
     struct timeval timeout;
     timeout.tv_sec = 0;
     timeout.tv_usec = 0;
-
-    int select_result = select(sockfd + 1, &read_fds, &write_fds, &except_fds, &timeout);
-
-    if (select_result < 0) {
+    int select_result = select(cSocket + 1, &read_fds, &write_fds, &except_fds, &timeout);
+    if (select_result < 0 || FD_ISSET(cSocket, &except_fds)) {
         return false;
     }
 
-    if (FD_ISSET(sockfd, &except_fds)) {
-        return false;
+    struct sockaddr_in peer_addr;
+    socklen_t peer_addr_len = sizeof(peer_addr);
+    if (getpeername(cSocket, (struct sockaddr*)&peer_addr, &peer_addr_len) != 0) {
+        return false;  
     }
 
-    return FD_ISSET(sockfd, &read_fds) || FD_ISSET(sockfd, &write_fds);
+    struct addrinfo hints, *res;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;  
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (getaddrinfo(host.c_str(), nullptr, &hints, &res) != 0) {
+        return false;  
+    }
+
+    bool ip_match = false;
+    for (struct addrinfo* addr = res; addr != nullptr; addr = addr->ai_next) {
+        struct sockaddr_in* resolved_addr = (struct sockaddr_in*)addr->ai_addr;
+        if (peer_addr.sin_addr.s_addr == resolved_addr->sin_addr.s_addr) {
+            // If new host, we save the new dns result so we dont have to resolve again on connection
+            ip_match = true;
+            dnsResult = res;
+            break;
+        }
+    }
+
+    return ip_match && (FD_ISSET(cSocket, &read_fds) || FD_ISSET(cSocket, &write_fds));
 }
 
 void TcpClient::FastDisconnect(){
@@ -500,7 +528,6 @@ const std::string TcpClient::GetCiphers(){
 
 void TcpClient::SetVerify(bool setVeriy){
     if(sslCtx){
-
         if(!setVeriy)
             SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, nullptr);
 
