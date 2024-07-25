@@ -369,7 +369,7 @@ int TcpClient::Read(std::vector<unsigned char>& buf){
             return -1;
     }
     else{
-        bytes_read = recv(cSocket, tmp, sizeof(tmp), 0);
+        bytes_read = recv(cSocket, reinterpret_cast<char*>(tmp), sizeof(tmp), 0);
         if (bytes_read <= 0)
             return -1;
     }
