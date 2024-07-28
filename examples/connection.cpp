@@ -8,7 +8,7 @@
 
 int main(){
     
-    TcpClient tcp("example.com", 443);
+    TcpClient tcp("www.google.com", 443);
     tcp.Init();
 
     if (tcp.Connect() == 0)
@@ -16,7 +16,9 @@ int main(){
         std::cout << "Connected!\n";
         std::cout << "TLS Cipher Used: " << tcp.GetCipher() << std::endl;
         std::cout << "TLS Version: " << tcp.GetTlsVersion() << std::endl;   
-        std::cout << "SNI: " << tcp.GetSNI();
+        std::cout << "SNI: " << tcp.GetSNI() << std::endl;
+        std::cout << "Verify: " << tcp.GetVerification() << std::endl;
+        
     }
     else{
         std::cout << "Failed to connect!\n"; 

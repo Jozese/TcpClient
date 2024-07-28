@@ -56,6 +56,7 @@ private:
 
     bool isSsl = true;
     bool expectedSsl = true;
+    bool pinnedPublicKey = false;   
 
 private:
     int ResolveDomainName();
@@ -98,6 +99,9 @@ public:
     void DisableNagle();
 
     const std::string GetCiphers();
+    
+    long GetVerification();
+    X509* GetCert();
 
     bool IsConnected();
     void FastDisconnect();

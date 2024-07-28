@@ -16,7 +16,8 @@ int main(){
         std::cout << "Connected!\n";
         std::cout << "TLS Cipher Used: " << tcp.GetCipher() << std::endl;
         std::cout << "TLS Version: " << tcp.GetTlsVersion() << std::endl;
-        std::cout << "SNI: " << tcp.GetSNI();
+        std::cout << "SNI: " << tcp.GetSNI() << std::endl;
+        std::cout << "Verify: " << tcp.GetVerification() << std::endl;
     }
 
     const std::string httpReq = "GET /get HTTP/1.1\r\nHost: httpbin.org\r\nConnection: Close\r\n\r\n";

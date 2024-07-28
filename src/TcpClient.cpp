@@ -74,6 +74,19 @@ int TcpClient::Connect(){
                 return 1;
         }
 
+        if (SSL_CTX_set_default_verify_paths(sslCtx) != 1) {
+            SSL_free(ssl);
+            SSL_CTX_free(this->sslCtx);
+            ssl = nullptr;
+            sslCtx = nullptr;
+            #ifdef _WIN32
+                closesocket(cSocket);
+            #elif __linux__
+                close(cSocket);
+            #endif           
+            return 1;
+        }
+
         if (SSL_set_tlsext_host_name(ssl, host.c_str()) != 1) {
             SSL_free(ssl);
             SSL_CTX_free(this->sslCtx);
@@ -107,7 +120,7 @@ int TcpClient::Connect(){
 	}
 #endif
 
-
+    //If ssl was expected, TLS handshake attempt, if bad, fallback to nonssl connection. SSL resources will be cleaned on object deletion
     if(expectedSsl){
         if (SSL_connect(ssl) != 1) {
             isSsl = false;
@@ -532,4 +545,16 @@ void TcpClient::SetVerify(bool setVeriy){
             SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, nullptr);
 
     }
+}
+
+X509* TcpClient::GetCert(){
+    if(ssl && isSsl)
+        return SSL_get_peer_certificate(ssl);
+    return nullptr;
+}
+
+long TcpClient::GetVerification(){
+    if(ssl && isSsl)
+        return SSL_get_verify_result(ssl);
+    return -1;
 }
