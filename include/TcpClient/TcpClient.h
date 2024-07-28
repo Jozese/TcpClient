@@ -53,6 +53,7 @@ private:
 
     SSL_CTX* sslCtx = nullptr;
     SSL* ssl = nullptr;
+    X509* cert = nullptr;
 
     bool isSsl = true;
     bool expectedSsl = true;

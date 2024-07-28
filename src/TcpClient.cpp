@@ -147,6 +147,10 @@ void TcpClient::Cleanup(){
     if (sslCtx != nullptr) {
         SSL_CTX_free(sslCtx);
     }
+    if(cert != nullptr){
+        X509_free(cert);
+        cert = nullptr;
+    }
     if (dnsResult != nullptr) {
         freeaddrinfo(dnsResult);
     }
@@ -468,6 +472,11 @@ void TcpClient::FastDisconnect(){
         ssl = nullptr;
     }
 
+    if(cert){
+        X509_free(cert);
+        cert = nullptr;
+    }
+
     if (dnsResult != nullptr) {
         freeaddrinfo(dnsResult);
         dnsResult = nullptr;
@@ -549,8 +558,8 @@ void TcpClient::SetVerify(bool setVeriy){
 
 X509* TcpClient::GetCert(){
     if(ssl && isSsl)
-        return SSL_get_peer_certificate(ssl);
-    return nullptr;
+        cert = SSL_get_peer_certificate(ssl);
+    return cert;
 }
 
 long TcpClient::GetVerification(){
