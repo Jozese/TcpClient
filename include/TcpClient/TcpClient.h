@@ -104,6 +104,8 @@ public:
     long GetVerification();
     X509* GetCert();
 
+    std::pair<int, std::vector<unsigned char>> GetPubKey();
+
     bool IsConnected();
     void FastDisconnect();
     

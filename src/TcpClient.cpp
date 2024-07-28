@@ -548,22 +548,58 @@ const std::string TcpClient::GetCiphers(){
     return ss.str();
 }
 
+
 void TcpClient::SetVerify(bool setVeriy){
     if(sslCtx){
         if(!setVeriy)
             SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, nullptr);
-
+        else
+            SSL_CTX_set_verify(sslCtx, SSL_VERIFY_PEER, nullptr);
     }
 }
 
 X509* TcpClient::GetCert(){
+    if(cert){
+        X509_free(cert);
+        cert = nullptr;
+    }
+
     if(ssl && isSsl)
         cert = SSL_get_peer_certificate(ssl);
     return cert;
 }
 
+//Even if verification was skipped, X509_V_OK will be returned, should pass a callback to SSL_CTX_set_verify in order to fix that
 long TcpClient::GetVerification(){
     if(ssl && isSsl)
         return SSL_get_verify_result(ssl);
     return -1;
+}
+
+std::pair<int, std::vector<unsigned char>> TcpClient::GetPubKey(){
+    X509* cCert = cert;
+    std::vector<unsigned char> result;
+    
+    //Attempts to get a valid certificate if there wasnt one already
+    if(!cCert){
+        cCert = this->GetCert();
+    }
+
+    if(!cCert)
+        return {};
+    
+    EVP_PKEY* pubkey = X509_get_pubkey(cCert);
+    
+    if(!pubkey)
+        return {};
+
+    int keyType = EVP_PKEY_base_id(pubkey);
+    
+    unsigned char* buf = nullptr;
+    int pubKeyLength = i2d_PublicKey(pubkey, &buf);
+
+    result.assign(buf, buf + pubKeyLength);
+    free(buf); 
+
+    return {keyType,result};
 }
