@@ -118,7 +118,7 @@ int TcpClient::Connect() {
     return 1;
   }
 #elif _WIN32
-  if (connect(cSocket, (SOCKADDR *)&sAddr, sizeof(sAddr)) == -1) {
+  if (connect(cSocket, (SOCKADDR *)&sAddr, sizeof(sAddr)) == SOCKET_ERROR) {
     closesocket(cSocket);
     WSACleanup();
     ssl = nullptr;
@@ -127,13 +127,17 @@ int TcpClient::Connect() {
   }
 #endif
 
+  // If ssl was expected, TLS handshake attempt, if bad, fallback to nonssl
+  // connection. Connection can still be upgraded to SSL if necessary. SSL
+  // resources will be cleaned on object deletion
   if (expectedSsl) {
     if (SSL_connect(ssl) != 1) {
-      return 1;
+      isSsl = false;
     }
+  } else {
+    isSsl = false;
   }
 
-  isSsl = false;
   return 0;
 }
 
