@@ -10,6 +10,8 @@
 #include <locale>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <openssl/x509_vfy.h>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -30,6 +32,7 @@
 #include <ip2string.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <wincrypt.h>
 #endif
 
 class TcpClient {
@@ -43,6 +46,10 @@ private:
 #ifdef _WIN32
   char ipv4[INET_ADDRSTRLEN];
   WSADATA wsaData;
+  
+  X509_STORE *store = nullptr;
+  bool storeSet = false;
+
 #endif
 
   std::string host;
@@ -60,6 +67,10 @@ private:
   int ResolveDomainName();
   int SocketCreate();
   void Cleanup();
+#ifdef _WIN32
+  bool CopyWinRootCertStore();
+#endif
+
 
 public:
   TcpClient();

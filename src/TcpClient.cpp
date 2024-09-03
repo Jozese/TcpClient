@@ -59,24 +59,34 @@ TcpClient::TcpClient(const std::string &host, unsigned short port,
   SSL_CTX_set_mode(sslCtx, SSL_MODE_AUTO_RETRY);
 }
 
-void TcpClient::Init() { SocketCreate(); }
+void TcpClient::Init() { 
+  cSocket = -1;
+  #ifdef _WIN32
+    if(!CopyWinRootCertStore()){
+      return; // no socket will be created so Connect will abort
+    }
+  #endif
+  SocketCreate(); 
+}
 
 int TcpClient::Connect() {
   if (cSocket == -1)
     return 1;
-  // Make setter to allow custom path/store/CA cert
-  if (SSL_CTX_set_default_verify_paths(sslCtx) != 1) {
-    SSL_free(ssl);
-    SSL_CTX_free(this->sslCtx);
-    ssl = nullptr;
-    sslCtx = nullptr;
 #ifdef _WIN32
-    closesocket(cSocket);
+    if(!storeSet){
+      SSL_CTX_set_cert_store(sslCtx, store);
+      storeSet = true;
+    }
 #elif __linux__
-    close(cSocket);
+  if (SSL_CTX_set_default_verify_paths(sslCtx) != 1) {
+      SSL_free(ssl);
+      SSL_CTX_free(this->sslCtx);
+      ssl = nullptr;
+      sslCtx = nullptr;
+      return 1;
+    }
 #endif
-    return 1;
-  }
+
   if (!ssl)
     ssl = SSL_new(this->sslCtx);
 
@@ -127,12 +137,9 @@ int TcpClient::Connect() {
   }
 #endif
 
-  // If ssl was expected, TLS handshake attempt, if bad, fallback to nonssl
-  // connection. Connection can still be upgraded to SSL if necessary. SSL
-  // resources will be cleaned on object deletion
   if (expectedSsl) {
     if (SSL_connect(ssl) != 1) {
-      isSsl = false;
+      return 1;
     }
   } else {
     isSsl = false;
@@ -149,6 +156,7 @@ void TcpClient::Cleanup() {
     close(cSocket);
 #endif
   }
+
   if (ssl != nullptr) {
     SSL_shutdown(ssl);
     SSL_free(ssl);
@@ -661,3 +669,33 @@ void TcpClient::OverwriteSNI(const std::string &sni) {
   if (ssl)
     SSL_set_tlsext_host_name(ssl, sni.c_str());
 }
+
+#ifdef _WIN32
+bool TcpClient::CopyWinRootCertStore(){
+  store = X509_STORE_new();
+  if (!store) 
+    return false;
+
+  HCERTSTORE hStore;
+  PCCERT_CONTEXT pContext = NULL;
+
+  hStore = CertOpenSystemStoreA(NULL, "ROOT");
+  if (!hStore) {
+    X509_STORE_free(store);
+    return false;
+  }
+
+  while (pContext = CertEnumCertificatesInStore(hStore, pContext)) {
+      const unsigned char *cert_data = pContext->pbCertEncoded;
+      X509 *x509 = d2i_X509(NULL, &cert_data, pContext->cbCertEncoded);    
+      if (x509) {
+        if (X509_STORE_add_cert(store, x509) != 1) {
+          return false;
+        }
+        X509_free(x509);
+    }
+  }
+  CertCloseStore(hStore, 0);
+  return true;
+}
+#endif
