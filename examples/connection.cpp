@@ -1,6 +1,5 @@
 #include "../include/TcpClient/TcpClient.h"
-#include <iomanip>
-#include <openssl/prov_ssl.h>
+
 
 /*
     Connects to example.com on port 443
@@ -10,7 +9,7 @@
 
 int main() {
 
-  TcpClient tcp("example.com", 443);
+  TcpClient tcp("104.16.55.40", 443);
   tcp.Init();
   tcp.SetTimeout(10);
 

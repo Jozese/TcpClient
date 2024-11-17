@@ -18,7 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef __linux__
+#if defined(__APPLE__) || defined(__linux__)
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -28,7 +28,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#elif _WIN32
+#elif defined(_WIN32) || defined(_WIN64)
 #include <ip2string.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -43,7 +43,7 @@ private:
 
   addrinfo *dnsResult = nullptr, *iter = nullptr;
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
   char ipv4[INET_ADDRSTRLEN];
   WSADATA wsaData;
   
@@ -67,7 +67,7 @@ private:
   int ResolveDomainName();
   int SocketCreate();
   void Cleanup();
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
   bool CopyWinRootCertStore();
 #endif
 
@@ -83,6 +83,9 @@ public:
   const std::string GetCipher();
   const std::string GetSNI();
   const std::string GetCiphers();
+  const int GetCurrentFD();
+  
+  SSL* GetSSL();
 
 public:
   void SetHost(const std::string &newHost) { host = newHost; }

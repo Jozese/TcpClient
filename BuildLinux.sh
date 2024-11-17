@@ -1,6 +1,6 @@
 #!/bin/bash
 
-g++ -c src/TcpClient.cpp
+g++ -c src/TcpClient.cpp --std=c++17
 ar crf lib/libTcpClient.a TcpClient.o
 rm TcpClient.o
 cp lib/libTcpClient.a /usr/local/lib

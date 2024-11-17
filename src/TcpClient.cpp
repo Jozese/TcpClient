@@ -1,16 +1,10 @@
 #include "../include/TcpClient/TcpClient.h"
-#include <cstddef>
-#include <cstdio>
-#include <iterator>
-#include <openssl/bio.h>
-#include <openssl/evp.h>
-#include <openssl/sha.h>
-#include <openssl/ssl.h>
+
 
 // SSLctx created on construnction so we can apply settings before creating our
 // SSL object
 TcpClient::TcpClient() {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
   if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
     WSACleanup();
   }
@@ -27,7 +21,7 @@ TcpClient::TcpClient() {
 TcpClient::TcpClient(const std::string &host, unsigned short port)
     : host(host), port(port) {
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
   if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
     WSACleanup();
   }
@@ -45,7 +39,7 @@ TcpClient::TcpClient(const std::string &host, unsigned short port,
                      bool expectedSsl)
     : host(host), port(port), expectedSsl(expectedSsl) {
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
   if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
     WSACleanup();
   }
@@ -61,7 +55,7 @@ TcpClient::TcpClient(const std::string &host, unsigned short port,
 
 void TcpClient::Init() { 
   cSocket = -1;
-  #ifdef _WIN32
+  #if defined(_WIN32) || defined(_WIN64)
     if(!CopyWinRootCertStore()){
       return; // no socket will be created so Connect will abort
     }
@@ -69,15 +63,20 @@ void TcpClient::Init() {
   SocketCreate(); 
 }
 
+const int TcpClient::GetCurrentFD(){
+  return this->cSocket;
+}
+
 int TcpClient::Connect() {
   if (cSocket == -1)
     return 1;
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
     if(!storeSet){
       SSL_CTX_set_cert_store(sslCtx, store);
       storeSet = true;
     }
-#elif __linux__
+#elif defined(__APPLE__) || defined(__linux__)  
+
   if (SSL_CTX_set_default_verify_paths(sslCtx) != 1) {
       SSL_free(ssl);
       SSL_CTX_free(this->sslCtx);
@@ -95,9 +94,9 @@ int TcpClient::Connect() {
     SSL_CTX_free(this->sslCtx);
     ssl = nullptr;
     sslCtx = nullptr;
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
     closesocket(cSocket);
-#elif __linux__
+#elif defined(__APPLE__) || defined(__linux__) 
     close(cSocket);
 #endif
     return 1;
@@ -110,15 +109,15 @@ int TcpClient::Connect() {
     SSL_CTX_free(this->sslCtx);
     ssl = nullptr;
     sslCtx = nullptr;
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
     closesocket(cSocket);
-#elif __linux__
+#elif defined(__APPLE__) || defined(__linux__) 
     close(cSocket);
 #endif
     return 1;
   }
 
-#ifdef __linux__
+#if defined(__APPLE__) || defined(__linux__)  
   if (connect(this->cSocket, iter->ai_addr, iter->ai_addrlen) == -1) {
     SSL_free(ssl);
     SSL_CTX_free(this->sslCtx);
@@ -127,7 +126,7 @@ int TcpClient::Connect() {
     close(cSocket);
     return 1;
   }
-#elif _WIN32
+#elif defined(_WIN32) || defined(_WIN64)
   if (connect(cSocket, (SOCKADDR *)&sAddr, sizeof(sAddr)) == SOCKET_ERROR) {
     closesocket(cSocket);
     WSACleanup();
@@ -150,9 +149,9 @@ int TcpClient::Connect() {
 
 void TcpClient::Cleanup() {
   if (cSocket != -1) {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
     closesocket(cSocket);
-#elif __linux__
+#elif defined(__APPLE__) || defined(__linux__)
     close(cSocket);
 #endif
   }
@@ -176,7 +175,7 @@ void TcpClient::Cleanup() {
 
 TcpClient::~TcpClient() { Cleanup(); }
 
-#ifdef __linux__
+#if defined(__APPLE__) || defined(__linux__)  
 
 int TcpClient::ResolveDomainName() {
   addrinfo hints;
@@ -211,7 +210,7 @@ int TcpClient::SocketCreate() {
   return 0;
 }
 
-#elif _WIN32
+#elif defined(_WIN32) || defined(_WIN64)
 
 int TcpClient::ResolveDomainName() {
   int resolve = getaddrinfo(this->host.c_str(), 0, nullptr, &dnsResult);
@@ -418,9 +417,10 @@ bool TcpClient::IsConnected() {
 
   int error = 0;
   socklen_t len = sizeof(error);
-#ifdef __linux__
-  int err = getsockopt(cSocket, SOL_SOCKET, SO_ERROR, &error, &len);
-#elif _WIN32
+#if defined(__APPLE__) || defined(__linux__)  
+int err = getsockopt(cSocket, SOL_SOCKET, SO_ERROR, &error, &len);
+
+#elif defined(_WIN32) || defined(_WIN64)
   int err = getsockopt(cSocket, SOL_SOCKET, SO_ERROR, (char *)&error, &len);
 #endif
   if (err < 0 || error != 0)
@@ -501,7 +501,8 @@ void TcpClient::FastDisconnect() {
   }
 
   if (cSocket != -1) {
-#ifdef __linux__
+
+#if defined(__APPLE__) || defined(__linux__)  
     close(this->cSocket);
     cSocket = -1;
 #elif _WIN32
@@ -512,13 +513,13 @@ void TcpClient::FastDisconnect() {
 }
 
 void TcpClient::SetTimeout(time_t sec) {
-#ifdef __linux__
+#if defined(__APPLE__) || defined(__linux__)  
   struct timeval tv;
   tv.tv_sec = sec;
   tv.tv_usec = 0;
   setsockopt(cSocket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv);
   setsockopt(cSocket, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv, sizeof tv);
-#elif _WIN32
+#elif defined(_WIN32) || defined(_WIN64)
   DWORD millisec = static_cast<DWORD>(sec * 1000);
   setsockopt(cSocket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&millisec,
              sizeof(millisec));
@@ -646,6 +647,12 @@ std::vector<unsigned char> TcpClient::GetCertDigest() {
   return result;
 }
 
+SSL* TcpClient::GetSSL(){
+  if(ssl)
+    return ssl;
+  return nullptr;
+}
+
 bool TcpClient::UpgradeConnection() {
   if (isSsl || !ssl) {
     return false;
@@ -670,7 +677,7 @@ void TcpClient::OverwriteSNI(const std::string &sni) {
     SSL_set_tlsext_host_name(ssl, sni.c_str());
 }
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 bool TcpClient::CopyWinRootCertStore(){
   store = X509_STORE_new();
   if (!store) 
